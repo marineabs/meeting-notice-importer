@@ -5,6 +5,7 @@ struct MeetingImporterApp: App {
     var body: some Scene {
         WindowGroup {
             MeetingInputView()
+                .preferredColorScheme(.light)
         }
     }
 }

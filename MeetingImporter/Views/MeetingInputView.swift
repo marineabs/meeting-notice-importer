@@ -169,7 +169,6 @@ struct MeetingInputView: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(Color.blue.opacity(0.09), lineWidth: 1)
         }
-        .environment(\.colorScheme, .light)
     }
 
     private var promptCardBackground: some View {
@@ -249,6 +248,11 @@ struct MeetingInputView: View {
             }
 
             VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Spacer()
+                    sourceTextActions
+                }
+
                 TextEditor(text: $sourceText)
                     .font(.subheadline)
                     .frame(minHeight: 230)
@@ -271,39 +275,39 @@ struct MeetingInputView: View {
             }
             .padding()
             .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 18))
-            .overlay(alignment: .topTrailing) {
-                HStack(spacing: 6) {
-                    Button {
-                        copySourceText()
-                    } label: {
-                        if didCopy {
-                            Label("已复制", systemImage: "checkmark")
-                        } else {
-                            Text("复制")
-                        }
-                    }
-                    .tint(.blue)
-                    .disabled(sourceText.isEmpty)
-
-                    Button {
-                        clearSourceText()
-                    } label: {
-                        if didClear {
-                            Label("已清除", systemImage: "checkmark")
-                        } else {
-                            Text("清除")
-                        }
-                    }
-                    .tint(.blue)
-                    .disabled(sourceText.isEmpty && !didClear)
-                }
-                .font(.caption.bold())
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.roundedRectangle(radius: 8))
-                .controlSize(.small)
-                .padding(12)
-            }
         }
+    }
+
+    private var sourceTextActions: some View {
+        HStack(spacing: 6) {
+            Button {
+                copySourceText()
+            } label: {
+                if didCopy {
+                    Label("已复制", systemImage: "checkmark")
+                } else {
+                    Text("复制")
+                }
+            }
+            .tint(.blue)
+            .disabled(sourceText.isEmpty)
+
+            Button {
+                clearSourceText()
+            } label: {
+                if didClear {
+                    Label("已清除", systemImage: "checkmark")
+                } else {
+                    Text("清除")
+                }
+            }
+            .tint(.blue)
+            .disabled(sourceText.isEmpty && !didClear)
+        }
+        .font(.caption.bold())
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: 8))
+        .controlSize(.small)
     }
 
     private var privacyNote: some View {
