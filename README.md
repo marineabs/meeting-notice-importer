@@ -2,6 +2,8 @@
 
 一个把微信、短信、邮件中的会议文字通知整理为 iPhone 日历事件的原生 iOS App。
 
+[隐私政策](https://marineabs.github.io/meeting-notice-importer/)
+
 ## 当前 MVP
 
 - 手动粘贴会议通知

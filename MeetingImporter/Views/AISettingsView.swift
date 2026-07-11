@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct AISettingsView: View {
+    private let privacyPolicyURL = URL(string: "https://marineabs.github.io/meeting-notice-importer/")!
+    private let contactEmailURL = URL(string: "mailto:xwbj@hotmail.com")!
+
     @Environment(\.dismiss) private var dismiss
     @State private var zhipuAPIKey = ""
     @State private var qwenAPIKey = ""
@@ -69,8 +72,18 @@ struct AISettingsView: View {
                     }
                     .disabled(qwenAPIKey.isEmpty && !APIKeyStore.shared.hasAPIKey(for: .qwen))
                 }
+
+                Section("关于与支持") {
+                    Link(destination: contactEmailURL) {
+                        Label("联系我们", systemImage: "envelope")
+                    }
+
+                    Link(destination: privacyPolicyURL) {
+                        Label("隐私政策", systemImage: "hand.raised")
+                    }
+                }
             }
-            .navigationTitle("AI 分析设置")
+            .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
