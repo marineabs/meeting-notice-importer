@@ -88,6 +88,20 @@ final class MeetingTextParserTests: XCTestCase {
         """)
     }
 
+    func testNormalizesSpokenRelativeDateWithWeekdayInOriginalText() {
+        let transcript = MeetingSpeechFormatter.format(
+            "会议名称办公会日期下周三起始时间上午9点地点教学楼A106会议室参会人员办公室主要会议内容研究工作安排"
+        )
+
+        let normalized = MeetingTextParser(calendar: calendar).normalizingSpokenTemplateDate(
+            transcript,
+            referenceDate: referenceDate
+        )
+
+        XCTAssertTrue(normalized.contains("日期：2026年7月15日（星期三）"))
+        XCTAssertTrue(normalized.contains("起始时间：上午9点"))
+    }
+
     func testAddsDefaultDurationWhenEndTimeIsMissing() {
         let text = """
         主题：预算评审会
@@ -136,6 +150,30 @@ final class MeetingTextParserTests: XCTestCase {
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: draft.startDate)
 
         XCTAssertEqual(components, DateComponents(year: 2026, month: 1, day: 5, hour: 9, minute: 0))
+    }
+
+    func testParsesNextMonthDayAsConcreteDate() {
+        let draft = MeetingTextParser(calendar: calendar).parse("下个月5号上午召开办公会", referenceDate: referenceDate).draft
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: draft.startDate)
+
+        XCTAssertEqual(components, DateComponents(year: 2026, month: 8, day: 5, hour: 9, minute: 0))
+        XCTAssertTrue(draft.warnings.contains(where: { $0.contains("下个月5号") }))
+    }
+
+    func testBareNextWeekDefaultsToNextMondayWithWarning() {
+        let draft = MeetingTextParser(calendar: calendar).parse("下周上午召开办公会", referenceDate: referenceDate).draft
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: draft.startDate)
+
+        XCTAssertEqual(components, DateComponents(year: 2026, month: 7, day: 13, hour: 9, minute: 0))
+        XCTAssertTrue(draft.warnings.contains(where: { $0.contains("下周一") }))
+    }
+
+    func testBareNextMonthDefaultsToFirstDayWithWarning() {
+        let draft = MeetingTextParser(calendar: calendar).parse("下个月下午召开办公会", referenceDate: referenceDate).draft
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: draft.startDate)
+
+        XCTAssertEqual(components, DateComponents(year: 2026, month: 8, day: 1, hour: 14, minute: 0))
+        XCTAssertTrue(draft.warnings.contains(where: { $0.contains("下月1日") }))
     }
 
     func testEveningWithoutExactTimeDefaultsTo1830() {

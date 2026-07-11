@@ -74,6 +74,25 @@ struct MeetingTextParser {
         return ParsingResult(draft: draft, recognizedFields: recognized, method: .localRules)
     }
 
+    func normalizingSpokenTemplateDate(_ text: String, referenceDate: Date = Date()) -> String {
+        let normalizedText = normalize(text)
+        let dateResult = extractDate(from: normalizedText, referenceDate: referenceDate)
+        guard dateResult.wasRecognized, let date = dateResult.date else { return text }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy年M月d日（EEEE）"
+        let dateText = formatter.string(from: date)
+
+        return text.replacingOccurrences(
+            of: #"(?m)^\s*日期\s*[：:]\s*[^\n]*"#,
+            with: "日期：\(dateText)",
+            options: .regularExpression
+        )
+    }
+
     private func normalize(_ text: String) -> String {
         text
             .replacingOccurrences(of: "：", with: ":")
@@ -139,6 +158,15 @@ struct MeetingTextParser {
             return (calendar.date(byAdding: .day, value: offset, to: startOfToday), true, "识别到相对日期“\(token)”，请结合通知发送时间确认。")
         }
 
+        if let captures = firstCaptures(#"(?:下个月|下月)\s*(\d{1,2})[日号]?"#, in: text),
+           let day = captures.first.flatMap(Int.init),
+           let nextMonth = calendar.date(byAdding: .month, value: 1, to: startOfToday) {
+            let components = calendar.dateComponents([.year, .month], from: nextMonth)
+            if let date = calendar.date(from: DateComponents(year: components.year, month: components.month, day: day)) {
+                return (date, true, "识别到相对月份“下个月\(day)号”，已换算为具体日期，请确认。")
+            }
+        }
+
         if let captures = firstCaptures(#"(?<!\d)(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?"#, in: text),
            captures.count == 3,
            let year = Int(captures[0]), let month = Int(captures[1]), let day = Int(captures[2]) {
@@ -179,6 +207,31 @@ struct MeetingTextParser {
                 let date = calendar.date(byAdding: .day, value: offset, to: startOfToday)
                 return (date, true, "识别到相对星期“\(prefix)\(weekdayText)”，请结合通知发送时间确认。")
             }
+        }
+
+        if text.contains("下周末") || text.contains("下星期末") {
+            let appleWeekday = calendar.component(.weekday, from: startOfToday)
+            let todayIndex = (appleWeekday + 5) % 7
+            let offset = 7 - todayIndex + 5
+            let date = calendar.date(byAdding: .day, value: offset, to: startOfToday)
+            return (date, true, "识别到“下周末”，已暂按下周六填写，请确认具体日期。")
+        }
+
+        if text.contains("下周") || text.contains("下星期") {
+            let appleWeekday = calendar.component(.weekday, from: startOfToday)
+            let todayIndex = (appleWeekday + 5) % 7
+            let offset = 7 - todayIndex
+            let date = calendar.date(byAdding: .day, value: offset, to: startOfToday)
+            return (date, true, "仅识别到“下周”，已暂按下周一填写，请确认具体日期。")
+        }
+
+        if text.contains("下个月") || text.contains("下月") {
+            guard let nextMonth = calendar.date(byAdding: .month, value: 1, to: startOfToday) else {
+                return (nil, false, nil)
+            }
+            let components = calendar.dateComponents([.year, .month], from: nextMonth)
+            let date = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1))
+            return (date, true, "仅识别到“下个月”，已暂按下月1日填写，请确认具体日期。")
         }
 
         return (nil, false, nil)

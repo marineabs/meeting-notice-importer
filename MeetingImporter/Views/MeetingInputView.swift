@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MeetingInputView: View {
     @StateObject private var speechService = SpeechInputService()
@@ -12,6 +13,10 @@ struct MeetingInputView: View {
     @State private var showingInputExample = false
     @State private var isPressingVoiceInput = false
     @State private var speechTextPrefix = ""
+    @State private var didCopy = false
+    @State private var didClear = false
+    @State private var copyFeedbackToken = UUID()
+    @State private var clearFeedbackToken = UUID()
 
     private let coordinator = MeetingAnalysisCoordinator()
     private let localParser = MeetingTextParser()
@@ -64,9 +69,10 @@ struct MeetingInputView: View {
             .onChange(of: speechService.transcript) { _, transcript in
                 guard !transcript.isEmpty else { return }
                 let formattedTranscript = MeetingSpeechFormatter.format(transcript)
+                let normalizedTranscript = localParser.normalizingSpokenTemplateDate(formattedTranscript)
                 sourceText = speechTextPrefix.isEmpty
-                    ? formattedTranscript
-                    : "\(speechTextPrefix)\n\(formattedTranscript)"
+                    ? normalizedTranscript
+                    : "\(speechTextPrefix)\n\(normalizedTranscript)"
             }
             .alert("语音输入", isPresented: Binding(
                 get: { speechService.errorMessage != nil },
@@ -117,7 +123,7 @@ struct MeetingInputView: View {
                         .foregroundStyle(.blue)
                         .frame(width: 30, height: 30)
                         .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                    Text("通知输入提示词")
+                    Text("通知提示词")
                         .font(.headline)
                 }
 
@@ -158,7 +164,6 @@ struct MeetingInputView: View {
             }
             .padding(16)
         }
-        .aspectRatio(1_423.0 / 721.0, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .overlay {
             RoundedRectangle(cornerRadius: 18)
@@ -168,11 +173,18 @@ struct MeetingInputView: View {
 
     private var promptCardBackground: some View {
         GeometryReader { proxy in
-            let scale = proxy.size.width / 1_423.0
+            let horizontalScale = proxy.size.width / 1_423.0
+            let verticalScale = proxy.size.height / 721.0
             Image("PromptCardBackground")
                 .resizable()
-                .frame(width: 1_536.0 * scale, height: 1_024.0 * scale)
-                .offset(x: -55.0 * scale, y: -127.0 * scale)
+                .frame(
+                    width: 1_536.0 * horizontalScale,
+                    height: 1_024.0 * verticalScale
+                )
+                .offset(
+                    x: -55.0 * horizontalScale,
+                    y: -127.0 * verticalScale
+                )
         }
         .accessibilityHidden(true)
     }
@@ -182,7 +194,7 @@ struct MeetingInputView: View {
             ScrollView {
                 Text("""
                 会议名称：办公会
-                日期：2026年7月2日
+                日期：2026年7月2日（星期四）
                 起始时间：09:00至10:00
                 地点：教学楼A106会议室
                 参会人员：办公室、财务部负责人
@@ -209,7 +221,7 @@ struct MeetingInputView: View {
     private var inputSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("会议通知原文")
+                Text("通知原文")
                     .font(.headline)
                 Spacer()
                 HStack(spacing: 8) {
@@ -219,16 +231,15 @@ struct MeetingInputView: View {
                         if isAnalyzing {
                             ProgressView()
                         } else {
-                            Text("分析导入")
+                            Text("智能导出")
                         }
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("导入") {
+                    Button("立即导出") {
                         importDirectly()
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.green)
                 }
                 .font(.subheadline)
                 .buttonBorderShape(.roundedRectangle(radius: 9))
@@ -238,13 +249,16 @@ struct MeetingInputView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 TextEditor(text: $sourceText)
+                    .font(.subheadline)
                     .frame(minHeight: 230)
                     .padding(10)
+                    .scrollIndicators(.visible)
                     .scrollContentBackground(.hidden)
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
                     .overlay(alignment: .topLeading) {
                         if sourceText.isEmpty {
                             Text("在这里粘贴完整通知……")
+                                .font(.subheadline)
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 15)
                                 .padding(.vertical, 19)
@@ -256,6 +270,38 @@ struct MeetingInputView: View {
             }
             .padding()
             .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 18))
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 6) {
+                    Button {
+                        copySourceText()
+                    } label: {
+                        if didCopy {
+                            Label("已复制", systemImage: "checkmark")
+                        } else {
+                            Text("复制")
+                        }
+                    }
+                    .tint(.blue)
+                    .disabled(sourceText.isEmpty)
+
+                    Button {
+                        clearSourceText()
+                    } label: {
+                        if didClear {
+                            Label("已清除", systemImage: "checkmark")
+                        } else {
+                            Text("清除")
+                        }
+                    }
+                    .tint(.blue)
+                    .disabled(sourceText.isEmpty && !didClear)
+                }
+                .font(.caption.bold())
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.roundedRectangle(radius: 8))
+                .controlSize(.small)
+                .padding(12)
+            }
         }
     }
 
@@ -263,8 +309,8 @@ struct MeetingInputView: View {
         VStack(alignment: .leading, spacing: 7) {
             Label {
                 Text(isAIConfigured
-                     ? "分析导入：调用所选 AI，失败时自动使用备用模型。"
-                     : "分析导入：配置 AI 密钥后可使用。")
+                     ? "智能导出：将粘贴的文字智能模板化处理后导出到日历。"
+                     : "智能导出：配置 AI 密钥后可使用。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } icon: {
@@ -273,7 +319,7 @@ struct MeetingInputView: View {
             }
 
             Label {
-                Text("导入：仅由本机处理，不进行 AI 分析，直接导入日历。")
+                Text("立即导出：将通知内容直接导出到日历。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             } icon: {
@@ -301,6 +347,34 @@ struct MeetingInputView: View {
     private func importDirectly() {
         speechService.stopRecording()
         parsingResult = localParser.parse(sourceText)
+    }
+
+    private func clearSourceText() {
+        speechService.cancelRecording()
+        isPressingVoiceInput = false
+        speechTextPrefix = ""
+        sourceText = ""
+        didCopy = false
+        let token = UUID()
+        clearFeedbackToken = token
+        withAnimation { didClear = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard clearFeedbackToken == token else { return }
+            withAnimation { didClear = false }
+        }
+    }
+
+    private func copySourceText() {
+        UIPasteboard.general.string = sourceText
+        let token = UUID()
+        copyFeedbackToken = token
+        withAnimation { didCopy = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard copyFeedbackToken == token else { return }
+            withAnimation { didCopy = false }
+        }
     }
 
     private func refreshAIStatus() {
