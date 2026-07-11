@@ -379,7 +379,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2026.7.11;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.MeetingImporter;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marine.MeetingImporter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -405,7 +405,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2026.7.11;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.MeetingImporter;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marine.MeetingImporter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
