@@ -10,6 +10,7 @@ struct AISettingsView: View {
     @State private var alertMessage: String?
     @State private var dismissAfterAlert = false
     @State private var isTestingQwen = false
+    @State private var pendingAPIKeyDeletion: AIProviderKey?
 
     var body: some View {
         NavigationStack {
@@ -28,9 +29,8 @@ struct AISettingsView: View {
                     Link("打开智谱 API Key 控制台", destination: URL(string: "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys")!)
 
                     Button("删除已保存的密钥", role: .destructive) {
-                        APIKeyStore.shared.deleteAPIKey(for: .zhipu)
-                        zhipuAPIKey = ""
-                        alertMessage = "已删除智谱密钥。"
+                        dismissAfterAlert = false
+                        pendingAPIKeyDeletion = .zhipu
                     }
                     .disabled(zhipuAPIKey.isEmpty && !APIKeyStore.shared.hasAPIKey(for: .zhipu))
                 }
@@ -65,10 +65,8 @@ struct AISettingsView: View {
                     )
 
                     Button("删除千问密钥", role: .destructive) {
-                        APIKeyStore.shared.deleteAPIKey(for: .qwen)
-                        qwenAPIKey = ""
                         dismissAfterAlert = false
-                        alertMessage = "已删除千问密钥。"
+                        pendingAPIKeyDeletion = .qwen
                     }
                     .disabled(qwenAPIKey.isEmpty && !APIKeyStore.shared.hasAPIKey(for: .qwen))
                 }
@@ -80,6 +78,17 @@ struct AISettingsView: View {
 
                     Link(destination: privacyPolicyURL) {
                         Label("隐私政策", systemImage: "hand.raised")
+                    }
+
+                    Label {
+                        HStack(spacing: 8) {
+                            Text("软件版本")
+                            Text(appVersion)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(.blue)
                     }
                 }
             }
@@ -111,7 +120,46 @@ struct AISettingsView: View {
             } message: {
                 Text(alertMessage ?? "")
             }
+            .confirmationDialog(
+                "确认删除 API Key？",
+                isPresented: Binding(
+                    get: { pendingAPIKeyDeletion != nil },
+                    set: { if !$0 { pendingAPIKeyDeletion = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: pendingAPIKeyDeletion
+            ) { provider in
+                Button("删除\(providerName(provider))密钥", role: .destructive) {
+                    deleteAPIKey(for: provider)
+                }
+                Button("取消", role: .cancel) {}
+            } message: { provider in
+                Text("删除后将无法使用\(providerName(provider))进行智能导出，除非重新填写并保存密钥。")
+            }
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    private func providerName(_ provider: AIProviderKey) -> String {
+        switch provider {
+        case .zhipu: "智谱"
+        case .qwen: "千问"
+        }
+    }
+
+    private func deleteAPIKey(for provider: AIProviderKey) {
+        APIKeyStore.shared.deleteAPIKey(for: provider)
+        switch provider {
+        case .zhipu:
+            zhipuAPIKey = ""
+        case .qwen:
+            qwenAPIKey = ""
+        }
+        pendingAPIKeyDeletion = nil
+        alertMessage = "已删除\(providerName(provider))密钥。"
     }
 
     private func save() {

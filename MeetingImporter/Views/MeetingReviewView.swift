@@ -7,6 +7,7 @@ struct MeetingReviewView: View {
     @State private var draft: MeetingDraft
     @State private var isSaving = false
     @State private var alert: SaveAlert?
+    @State private var isOriginalTextExpanded = false
 
     let recognizedFields: Set<RecognizedField>
 
@@ -18,17 +19,40 @@ struct MeetingReviewView: View {
     var body: some View {
         Form {
             Section("会议信息") {
-                TextField("会议主题", text: $draft.title)
+                LabeledContent("会议名称") {
+                    TextField("请输入会议名称", text: $draft.title)
+                        .multilineTextAlignment(.trailing)
+                }
 
-                DatePicker("开始", selection: $draft.startDate)
-                DatePicker("结束", selection: $draft.endDate, in: draft.startDate...)
+                HStack {
+                    Text("日期")
+                    Spacer()
+                    DatePicker("", selection: startDateBinding, displayedComponents: .date)
+                        .labelsHidden()
+                    Text(weekdayText(for: draft.startDate))
+                        .foregroundStyle(.secondary)
+                }
 
-                TextField("地点（可选）", text: $draft.location)
-                TextField("线上会议链接（可选）", text: $draft.meetingURL)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                TextField("参会人员（可选）", text: $draft.attendees, axis: .vertical)
-                    .lineLimit(2...4)
+                DatePicker("开始时间", selection: startDateBinding, displayedComponents: .hourAndMinute)
+                DatePicker("结束时间", selection: $draft.endDate, in: draft.startDate..., displayedComponents: .hourAndMinute)
+
+                LabeledContent("会议地点") {
+                    TextField("未填写", text: $draft.location)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                LabeledContent("参会人员") {
+                    TextField("未填写", text: $draft.attendees, axis: .vertical)
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2...4)
+                }
+
+                LabeledContent("线上会议链接") {
+                    TextField("未填写", text: $draft.meetingURL)
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                }
             }
 
             Section("提醒") {
@@ -43,15 +67,8 @@ struct MeetingReviewView: View {
                 }
             }
 
-            Section {
-                Text(draft.originalText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            } header: {
-                Text("原始通知")
-            } footer: {
-                Text("会议通知原文会完整写入日历备注。")
+            if !draft.warnings.isEmpty {
+                warningSection
             }
 
             Section {
@@ -71,8 +88,21 @@ struct MeetingReviewView: View {
                 .disabled(!canSave || isSaving)
             }
 
-            if !draft.warnings.isEmpty {
-                warningSection
+            Section {
+                DisclosureGroup(
+                    isOriginalTextExpanded ? "收起原始通知" : "查看原始通知",
+                    isExpanded: $isOriginalTextExpanded
+                ) {
+                    Text(draft.originalText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(.top, 6)
+                }
+            } header: {
+                Text("原始通知")
+            } footer: {
+                Text("会议通知原文会完整写入日历备注。")
             }
         }
         .navigationTitle("确认会议信息")
@@ -103,6 +133,24 @@ struct MeetingReviewView: View {
 
     private var canSave: Bool {
         !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.endDate > draft.startDate
+    }
+
+    private var startDateBinding: Binding<Date> {
+        Binding(
+            get: { draft.startDate },
+            set: { newStartDate in
+                let existingDuration = draft.endDate.timeIntervalSince(draft.startDate)
+                let preservedDuration = existingDuration > 0 ? existingDuration : 3_600
+                draft.startDate = newStartDate
+                draft.endDate = newStartDate.addingTimeInterval(preservedDuration)
+            }
+        )
+    }
+
+    private func weekdayText(for date: Date) -> String {
+        let symbols = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return "（\(symbols[weekday - 1])）"
     }
 
     private func saveToCalendar() {

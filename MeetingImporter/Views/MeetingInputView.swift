@@ -169,6 +169,7 @@ struct MeetingInputView: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(Color.blue.opacity(0.09), lineWidth: 1)
         }
+        .environment(\.colorScheme, .light)
     }
 
     private var promptCardBackground: some View {
@@ -309,7 +310,7 @@ struct MeetingInputView: View {
         VStack(alignment: .leading, spacing: 7) {
             Label {
                 Text(isAIConfigured
-                     ? "智能导出：将粘贴的文字智能模板化处理后导出到日历。"
+                     ? "智能导出：当前AI服务商模板化处理后导出到日历。"
                      : "智能导出：配置 AI 密钥后可使用。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
