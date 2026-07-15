@@ -61,7 +61,7 @@ final class MeetingTextParserTests: XCTestCase {
         let text = """
         会议名称：集中评审会
         开始日期：2026年7月11日
-        结束日期：2026年7月13日
+        截止日期：2026年7月13日
         起始时间：上午9点至10点
         地点：第二会议室
         """
@@ -77,7 +77,7 @@ final class MeetingTextParserTests: XCTestCase {
 
     func testParsesInlineDateRange() {
         let draft = MeetingTextParser(calendar: calendar).parse(
-            "会议名称：培训会\n日期：7月11日至13日\n时间：上午9点",
+            "会议名称：培训会\n日期：7月11日到13日\n时间：上午9点",
             referenceDate: referenceDate
         ).draft
         let start = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: draft.startDate)
@@ -118,6 +118,36 @@ final class MeetingTextParserTests: XCTestCase {
         """)
     }
 
+    func testFormatsCompleteSpokenTemplateWithoutMixingLocationAndAttendees() {
+        let transcript = "会议名称培训会起始日期7月11日结束日期7月13日起始时间上午9点到10点地点培训中心参会人员办公室主要内容集中培训"
+
+        let formatted = MeetingSpeechFormatter.format(transcript)
+
+        XCTAssertEqual(formatted, """
+        会议名称：培训会
+        开始日期：7月11日
+        截止日期：7月13日
+        起始时间：上午9点到10点
+        地点：培训中心
+        参会人员：办公室
+        主要内容：集中培训
+        """)
+    }
+
+    func testLocationUnitIsNotCopiedIntoAttendeesWhenAttendeesAreMissing() {
+        let transcript = "会议名称餐会日期7月16日起始时间晚上6点地点宴会中心主要内容部门聚餐"
+        let formatted = MeetingSpeechFormatter.format(transcript)
+        let normalized = MeetingTextParser(calendar: calendar).normalizingSpokenTemplateDate(
+            formatted,
+            referenceDate: referenceDate
+        )
+
+        let draft = MeetingTextParser(calendar: calendar).parse(normalized, referenceDate: referenceDate).draft
+
+        XCTAssertEqual(draft.location, "宴会中心")
+        XCTAssertEqual(draft.attendees, "")
+    }
+
     func testNormalizesSpokenRelativeDateWithWeekdayInOriginalText() {
         let transcript = MeetingSpeechFormatter.format(
             "会议名称办公会日期下周三起始时间上午9点地点教学楼A106会议室参会人员办公室主要会议内容研究工作安排"
@@ -128,8 +158,41 @@ final class MeetingTextParserTests: XCTestCase {
             referenceDate: referenceDate
         )
 
-        XCTAssertTrue(normalized.contains("日期：2026年7月15日（星期三）"))
+        XCTAssertTrue(normalized.contains("开始日期：2026年7月15日（星期三）"))
         XCTAssertTrue(normalized.contains("起始时间：上午9点"))
+    }
+
+    func testNormalizesSpokenDateRangeIntoStartAndEndDates() {
+        let transcript = MeetingSpeechFormatter.format(
+            "会议名称培训会日期7月11日到13日起始时间上午9点主要内容集中培训"
+        )
+
+        let normalized = MeetingTextParser(calendar: calendar).normalizingSpokenTemplateDate(
+            transcript,
+            referenceDate: referenceDate
+        )
+        let draft = MeetingTextParser(calendar: calendar).parse(normalized, referenceDate: referenceDate).draft
+        let start = calendar.dateComponents([.year, .month, .day], from: draft.startDate)
+        let end = calendar.dateComponents([.year, .month, .day], from: draft.endDate)
+
+        XCTAssertTrue(normalized.contains("开始日期：2026年7月11日（星期六）"))
+        XCTAssertTrue(normalized.contains("截止日期：2026年7月13日（星期一）"))
+        XCTAssertEqual(start, DateComponents(year: 2026, month: 7, day: 11))
+        XCTAssertEqual(end, DateComponents(year: 2026, month: 7, day: 13))
+    }
+
+    func testNormalizesSingleSpokenDateAsStartDateOnly() {
+        let transcript = MeetingSpeechFormatter.format("会议名称办公会日期7月12日起始时间上午9点")
+
+        let normalized = MeetingTextParser(calendar: calendar).normalizingSpokenTemplateDate(
+            transcript,
+            referenceDate: referenceDate
+        )
+        let draft = MeetingTextParser(calendar: calendar).parse(normalized, referenceDate: referenceDate).draft
+
+        XCTAssertTrue(normalized.contains("开始日期：2026年7月12日（星期日）"))
+        XCTAssertFalse(normalized.contains("截止日期："))
+        XCTAssertEqual(draft.endDate.timeIntervalSince(draft.startDate), 60 * 60)
     }
 
     func testAddsDefaultDurationWhenEndTimeIsMissing() {

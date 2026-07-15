@@ -89,23 +89,52 @@ struct MeetingTextParser {
 
     func normalizingSpokenTemplateDate(_ text: String, referenceDate: Date = Date()) -> String {
         let normalizedText = normalize(text)
-        let dateResult = extractDate(from: normalizedText, referenceDate: referenceDate)
-        guard dateResult.wasRecognized, let date = dateResult.date else { return text }
+        let dateRange = extractDateRange(from: normalizedText, referenceDate: referenceDate)
+        let startResult = dateRange.start ?? extractDate(from: normalizedText, referenceDate: referenceDate)
+        guard startResult.wasRecognized, let startDate = startResult.date else { return text }
 
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.timeZone = calendar.timeZone
         formatter.dateFormat = "yyyy年M月d日（EEEE）"
-        let dateText = formatter.string(from: date)
+        let startText = formatter.string(from: startDate)
+        let startLinePattern = #"(?m)^\s*(?:开始日期|起始日期|日期)\s*[：:]\s*[^\n]*"#
 
-        return ["开始日期", "起始日期", "日期"].reduce(text) { value, label in
-            value.replacingOccurrences(
-                of: #"(?m)^\s*"# + label + #"\s*[：:]\s*[^\n]*"#,
-                with: "\(label)：\(dateText)",
+        guard let endDate = dateRange.end?.date else {
+            return text.replacingOccurrences(
+                of: startLinePattern,
+                with: "开始日期：\(startText)",
                 options: .regularExpression
             )
         }
+
+        let endText = formatter.string(from: endDate)
+        let endLinePattern = #"(?m)^\s*(?:结束日期|截止日期|终止日期)\s*[：:]\s*[^\n]*"#
+        let hasExplicitEndDate = normalizedText.range(
+            of: endLinePattern,
+            options: .regularExpression
+        ) != nil
+
+        if hasExplicitEndDate {
+            return text
+                .replacingOccurrences(
+                    of: startLinePattern,
+                    with: "开始日期：\(startText)",
+                    options: .regularExpression
+                )
+                .replacingOccurrences(
+                    of: endLinePattern,
+                    with: "截止日期：\(endText)",
+                    options: .regularExpression
+                )
+        }
+
+        return text.replacingOccurrences(
+            of: startLinePattern,
+            with: "开始日期：\(startText)\n截止日期：\(endText)",
+            options: .regularExpression
+        )
     }
 
     private func normalize(_ text: String) -> String {
@@ -397,13 +426,21 @@ struct MeetingTextParser {
             }
         }
 
+        let attendeeSearchText = text.replacingOccurrences(
+            of: #"(?im)^\s*(?:会议地点|地点|地址)\s*:\s*[^\n]*"#,
+            with: "",
+            options: .regularExpression
+        )
         let unitPattern = #"[\p{Han}A-Za-z0-9·]{2,20}(?:公司|集团|部门|中心|办公室|委员会|团队|项目组|工作组|学院|学校|研究院|研究所|处|科|局|部)"#
         guard let regex = try? NSRegularExpression(pattern: unitPattern) else { return "" }
-        let matches = regex.matches(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text))
+        let matches = regex.matches(
+            in: attendeeSearchText,
+            range: NSRange(attendeeSearchText.startIndex..<attendeeSearchText.endIndex, in: attendeeSearchText)
+        )
         var units: [String] = []
         for match in matches {
-            guard let range = Range(match.range, in: text) else { continue }
-            let unit = String(text[range])
+            guard let range = Range(match.range, in: attendeeSearchText) else { continue }
+            let unit = String(attendeeSearchText[range])
             if !units.contains(unit) { units.append(unit) }
             if units.count == 8 { break }
         }
@@ -507,13 +544,16 @@ struct MeetingSpeechFormatter {
         var value = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         let fields: [(label: String, pattern: String)] = [
             ("主要会议内容", "主要会议内容"),
+            ("主要内容", "主要内容"),
             ("参会人员", "参会人员"),
             ("会议名称", "会议名称"),
+            ("开始日期", "起始日期"),
             ("开始日期", "开始日期"),
-            ("结束日期", "结束日期"),
+            ("截止日期", "结束日期"),
+            ("截止日期", "截止日期"),
             ("起始时间", "起始时间"),
             ("起始时间", #"(?<!起始)时间"#),
-            ("日期", "日期"),
+            ("日期", #"(?<!开始)(?<!起始)(?<!结束)(?<!截止)(?<!终止)日期"#),
             ("地点", "地点")
         ]
 

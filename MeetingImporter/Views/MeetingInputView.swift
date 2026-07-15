@@ -133,8 +133,6 @@ struct MeetingInputView: View {
                         GridRow {
                             Text("会议名称：…")
                             Text("日期：…")
-                                .hidden()
-                                .accessibilityHidden(true)
                         }
                         GridRow {
                             Text("起始时间：…")
@@ -142,7 +140,7 @@ struct MeetingInputView: View {
                         }
                         GridRow {
                             Text("参会人员：…")
-                            Text("主要会议内容：…")
+                            Text("主要内容：…")
                         }
                     }
                 }
@@ -196,11 +194,12 @@ struct MeetingInputView: View {
             ScrollView {
                 Text("""
                 会议名称：办公会
-                日期：2026年7月2日（星期四）
+                开始日期：2026年7月2日（星期四）
+                截止日期：2026年7月3日（星期五）
                 起始时间：09:00至10:00
                 地点：教学楼A106会议室
                 参会人员：办公室、财务部负责人
-                主要会议内容：审议年度工作安排
+                主要内容：审议年度工作安排
                 """)
                 .font(.body.monospaced())
                 .frame(maxWidth: .infinity, alignment: .leading)

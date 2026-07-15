@@ -10,12 +10,16 @@ final class SpeechInputService: ObservableObject {
 
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
+    private let audioSessionQueue = DispatchQueue(label: "com.marine.MeetingImporter.audio-session")
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var hasInstalledTap = false
+    private var isStarting = false
 
     func startRecording() async {
-        guard !isRecording else { return }
+        guard !isRecording, !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
         errorMessage = nil
 
         guard await requestSpeechPermission() else {
@@ -31,19 +35,17 @@ final class SpeechInputService: ObservableObject {
             return
         }
 
-        cancelRecording()
+        resetRecordingState()
         transcript = ""
 
         do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            try await activateAudioSession()
 
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
             request.taskHint = .dictation
             request.addsPunctuation = true
-            request.contextualStrings = ["会议名称", "日期", "起始时间", "时间", "地点", "参会人员", "主要会议内容"]
+            request.contextualStrings = ["会议名称", "起始日期", "结束日期", "日期", "起始时间", "时间", "地点", "参会人员", "主要内容"]
             recognitionRequest = request
 
             let inputNode = audioEngine.inputNode
@@ -83,17 +85,12 @@ final class SpeechInputService: ObservableObject {
         stopAudioCapture()
         recognitionRequest?.endAudio()
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        deactivateAudioSession()
     }
 
     func cancelRecording() {
-        stopAudioCapture()
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest = nil
-        isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        resetRecordingState()
+        deactivateAudioSession()
     }
 
     private func finishRecognition() {
@@ -101,7 +98,37 @@ final class SpeechInputService: ObservableObject {
         recognitionTask = nil
         recognitionRequest = nil
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        deactivateAudioSession()
+    }
+
+    private func resetRecordingState() {
+        stopAudioCapture()
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        isRecording = false
+    }
+
+    private func activateAudioSession() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            audioSessionQueue.async {
+                do {
+                    let audioSession = AVAudioSession.sharedInstance()
+                    try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+                    try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func deactivateAudioSession() {
+        audioSessionQueue.async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 
     private func stopAudioCapture() {

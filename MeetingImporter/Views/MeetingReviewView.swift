@@ -25,11 +25,20 @@ struct MeetingReviewView: View {
                 }
 
                 HStack {
-                    Text("日期")
+                    Text("开始日期")
                     Spacer()
                     DatePicker("", selection: startDateBinding, displayedComponents: .date)
                         .labelsHidden()
                     Text(weekdayText(for: draft.startDate))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text("截止日期")
+                    Spacer()
+                    DatePicker("", selection: $draft.endDate, in: draft.startDate..., displayedComponents: .date)
+                        .labelsHidden()
+                    Text(weekdayText(for: draft.endDate))
                         .foregroundStyle(.secondary)
                 }
 
