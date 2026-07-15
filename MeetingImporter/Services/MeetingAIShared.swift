@@ -1,5 +1,17 @@
 import Foundation
 
+enum MeetingExportAvailability {
+    static func canUseAI(text: String, isAnalyzing: Bool, isAIConfigured: Bool) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isAnalyzing
+            && isAIConfigured
+    }
+
+    static func canUseLocalRules(text: String, isAnalyzing: Bool) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isAnalyzing
+    }
+}
+
 struct AIMeetingPayload: Decodable {
     let title: String?
     let date: String?

@@ -236,16 +236,24 @@ struct MeetingInputView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(!MeetingExportAvailability.canUseAI(
+                        text: sourceText,
+                        isAnalyzing: isAnalyzing,
+                        isAIConfigured: isAIConfigured
+                    ))
 
                     Button("立即导出") {
                         importDirectly()
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(!MeetingExportAvailability.canUseLocalRules(
+                        text: sourceText,
+                        isAnalyzing: isAnalyzing
+                    ))
                 }
                 .font(.subheadline)
                 .buttonBorderShape(.roundedRectangle(radius: 9))
                 .controlSize(.small)
-                .disabled(sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAnalyzing)
             }
 
             VStack(alignment: .leading, spacing: 14) {

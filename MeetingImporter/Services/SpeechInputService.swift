@@ -15,22 +15,44 @@ final class SpeechInputService: ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var hasInstalledTap = false
     private var isStarting = false
+    private var recordingAttemptID: UUID?
 
     func startRecording() async {
         guard !isRecording, !isStarting else { return }
+        let attemptID = UUID()
+        recordingAttemptID = attemptID
         isStarting = true
-        defer { isStarting = false }
+        defer {
+            if recordingAttemptID == attemptID || recordingAttemptID == nil {
+                isStarting = false
+            }
+        }
         errorMessage = nil
 
+        if let simulatorMessage = simulatorUnsupportedMessage() {
+            recordingAttemptID = nil
+            errorMessage = simulatorMessage
+            return
+        }
+
         guard await requestSpeechPermission() else {
+            guard isCurrentAttempt(attemptID) else { return }
+            recordingAttemptID = nil
             errorMessage = "请在系统设置中允许“会议通知”使用语音识别。"
             return
         }
+        guard isCurrentAttempt(attemptID) else { return }
+
         guard await requestMicrophonePermission() else {
+            guard isCurrentAttempt(attemptID) else { return }
+            recordingAttemptID = nil
             errorMessage = "请在系统设置中允许“会议通知”使用麦克风。"
             return
         }
+        guard isCurrentAttempt(attemptID) else { return }
+
         guard recognizer?.isAvailable == true else {
+            recordingAttemptID = nil
             errorMessage = "系统语音识别当前不可用，请稍后重试。"
             return
         }
@@ -40,6 +62,10 @@ final class SpeechInputService: ObservableObject {
 
         do {
             try await activateAudioSession()
+            guard isCurrentAttempt(attemptID) else {
+                deactivateAudioSession()
+                return
+            }
 
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
@@ -61,12 +87,12 @@ final class SpeechInputService: ObservableObject {
 
             recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
+                    guard let self, self.isCurrentAttempt(attemptID) else { return }
                     if let result {
                         self.transcript = result.bestTranscription.formattedString
                     }
                     if error != nil || result?.isFinal == true {
-                        self.finishRecognition()
+                        self.finishRecognition(for: attemptID)
                     }
                 }
             }
@@ -75,13 +101,22 @@ final class SpeechInputService: ObservableObject {
             try audioEngine.start()
             isRecording = true
         } catch {
+            guard isCurrentAttempt(attemptID) else {
+                deactivateAudioSession()
+                return
+            }
+            let message = error.localizedDescription
             cancelRecording()
-            errorMessage = error.localizedDescription
+            errorMessage = message
         }
     }
 
     func stopRecording() {
-        guard isRecording else { return }
+        guard isRecording else {
+            recordingAttemptID = nil
+            isStarting = false
+            return
+        }
         stopAudioCapture()
         recognitionRequest?.endAudio()
         isRecording = false
@@ -89,16 +124,32 @@ final class SpeechInputService: ObservableObject {
     }
 
     func cancelRecording() {
+        recordingAttemptID = nil
+        isStarting = false
         resetRecordingState()
         deactivateAudioSession()
     }
 
-    private func finishRecognition() {
+    private func finishRecognition(for attemptID: UUID) {
+        guard isCurrentAttempt(attemptID) else { return }
+        recordingAttemptID = nil
         stopAudioCapture()
         recognitionTask = nil
         recognitionRequest = nil
         isRecording = false
         deactivateAudioSession()
+    }
+
+    private func isCurrentAttempt(_ attemptID: UUID) -> Bool {
+        recordingAttemptID == attemptID
+    }
+
+    private func simulatorUnsupportedMessage() -> String? {
+#if targetEnvironment(simulator)
+        "模拟器暂不支持语音输入，请在真机上使用。"
+#else
+        nil
+#endif
     }
 
     private func resetRecordingState() {

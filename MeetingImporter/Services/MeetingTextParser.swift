@@ -33,6 +33,13 @@ struct MeetingTextParser {
         let endBaseDate = dateRangeResult.end?.date ?? baseDate
         let periodDefault = defaultStartTime(from: text)
         let startComponents = timeResult.start ?? periodDefault?.time ?? (hour: 9, minute: 0)
+        if timeResult.start == nil {
+            if let periodDefault {
+                warnings.append("未识别到具体开始时间，已按\(periodDefault.period)\(periodDefault.displayTime)填写，请确认。")
+            } else {
+                warnings.append("未识别到开始时间，已按09:00填写，请确认。")
+            }
+        }
         let startDate = date(bySetting: startComponents, on: baseDate)
         let endDate: Date
 
@@ -47,24 +54,23 @@ struct MeetingTextParser {
             let candidate = date(bySetting: startComponents, on: endBaseDate)
             if candidate > startDate {
                 endDate = candidate
+                warnings.append("未识别到结束时间，已按截止日期的开始时间填写，请确认。")
             } else if calendar.isDate(endBaseDate, inSameDayAs: baseDate) {
                 endDate = startDate.addingTimeInterval(defaultDuration)
+                warnings.append("未识别到结束时间，已按默认一小时填写，请确认。")
             } else {
                 warnings.append("结束日期不晚于开始日期，已按默认一小时填写，请确认。")
                 endDate = startDate.addingTimeInterval(defaultDuration)
             }
         } else {
             endDate = startDate.addingTimeInterval(defaultDuration)
+            warnings.append("未识别到结束时间，已按默认一小时填写，请确认。")
         }
 
         if !dateResult.wasRecognized {
             warnings.append("未识别到会议日期，暂按今天填写，请务必确认。")
         }
-        let location = extractLabeledValue(
-            from: text,
-            labels: ["会议地点", "地点", "地址"],
-            stoppingAt: ["时间", "日期", "参会", "联系人", "会议链接", "链接"]
-        )
+        let location = extractLocation(from: text)
         if !location.isEmpty { recognized.insert(.location) }
 
         let attendees = extractAttendees(from: text)
@@ -177,6 +183,13 @@ struct MeetingTextParser {
         let convenePattern = #"(?im)(?:召开|举行|组织|开展)\s*([^，。；;\n]{2,32}?)(?:会议|研讨会|讨论会|评审会|协调会|交流会|座谈会)"#
         if let value = firstCapture(convenePattern, in: text) {
             return meetingTitle(topic: value, action: "")
+        }
+
+        if text.range(
+            of: #"(?im)(?:召开|举行|组织|开展)\s*(?:会议)?(?:[，,。；;\n]|$)"#,
+            options: .regularExpression
+        ) != nil {
+            return "会议安排"
         }
 
         let ignoredPrefixes = ["各位", "大家", "开始日期", "起始日期", "结束日期", "截止日期", "终止日期", "起始时间", "时间", "日期", "地点", "地址", "参会", "与会", "会议链接", "腾讯会议", "链接", "联系人", "通知"]
@@ -404,6 +417,29 @@ struct MeetingTextParser {
         let escapedStops = stopLabels.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
         let pattern = #"(?im)^\s*(?:"# + escapedLabels + #")\s*:\s*(.+?)(?=\n\s*(?:"# + escapedStops + #")\s*:|\n|$)"#
         return firstCapture(pattern, in: text).map(cleanValue) ?? ""
+    }
+
+    private func extractLocation(from text: String) -> String {
+        let labeled = extractLabeledValue(
+            from: text,
+            labels: ["会议地点", "地点", "地址"],
+            stoppingAt: ["时间", "日期", "参会", "联系人", "会议链接", "链接"]
+        )
+        if !labeled.isEmpty { return labeled }
+
+        let action = #"(?:召开|举行|组织|开展|研究|讨论|审议|评审|汇报|部署|推进|协调|沟通|交流|培训|开会)"#
+        let location = #"([^，,。；;\n]{1,40}?(?:会议室|会场|礼堂|报告厅|办公室|中心|大楼|酒店|宾馆|厅|室))"#
+        let patterns = [
+            #"(?im)在\s*"# + location + #"\s*(?="# + action + #"|[，,。；;\n]|$)"#,
+            #"(?im)(?<!定)于\s*"# + location + #"\s*(?="# + action + #"|[，,。；;\n]|$)"#
+        ]
+
+        for pattern in patterns {
+            if let value = firstCapture(pattern, in: text) {
+                return cleanValue(value)
+            }
+        }
+        return ""
     }
 
     private func extractAttendees(from text: String) -> String {

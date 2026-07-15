@@ -57,6 +57,26 @@ final class MeetingTextParserTests: XCTestCase {
         XCTAssertEqual(result.draft.meetingURL, "https://meeting.example.com/123")
     }
 
+    func testExtractsLocationFromNaturalConveneSentence() {
+        let draft = MeetingTextParser(calendar: calendar).parse(
+            "7月20日上午在A203会议室召开会议",
+            referenceDate: referenceDate
+        ).draft
+
+        XCTAssertEqual(draft.location, "A203会议室")
+        XCTAssertEqual(draft.title, "会议安排")
+    }
+
+    func testExtractsLocationFromNaturalResearchSentence() {
+        let draft = MeetingTextParser(calendar: calendar).parse(
+            "明天下午在第一会议室研究下半年工作安排，请办公室、财务部参加。",
+            referenceDate: referenceDate
+        ).draft
+
+        XCTAssertEqual(draft.location, "第一会议室")
+        XCTAssertEqual(draft.attendees, "办公室、财务部")
+    }
+
     func testParsesTemplateStartAndEndDates() {
         let text = """
         会议名称：集中评审会
@@ -205,14 +225,31 @@ final class MeetingTextParserTests: XCTestCase {
         let result = MeetingTextParser(calendar: calendar).parse(text, referenceDate: referenceDate)
 
         XCTAssertEqual(result.draft.endDate.timeIntervalSince(result.draft.startDate), 60 * 60)
-        XCTAssertFalse(result.draft.warnings.contains(where: { $0.contains("结束时间") }))
+        XCTAssertTrue(result.draft.warnings.contains(where: { $0.contains("结束时间") && $0.contains("默认一小时") }))
     }
 
-    func testDefaultTimesDoNotCreateWarnings() {
-        let result = MeetingTextParser(calendar: calendar).parse("主题：临时讨论会", referenceDate: referenceDate)
+    func testMissingTimesCreateWarnings() {
+        let result = MeetingTextParser(calendar: calendar).parse("日期：7月20日", referenceDate: referenceDate)
 
-        XCTAssertTrue(result.draft.warnings.contains(where: { $0.contains("未识别到会议日期") }))
-        XCTAssertFalse(result.draft.warnings.contains(where: { $0.contains("开始时间") || $0.contains("结束时间") }))
+        XCTAssertTrue(result.draft.warnings.contains(where: { $0.contains("开始时间") && $0.contains("09:00") }))
+        XCTAssertTrue(result.draft.warnings.contains(where: { $0.contains("结束时间") && $0.contains("默认一小时") }))
+    }
+
+    func testAIExportRequiresConfiguredProvider() {
+        XCTAssertFalse(MeetingExportAvailability.canUseAI(
+            text: "日期：7月20日",
+            isAnalyzing: false,
+            isAIConfigured: false
+        ))
+        XCTAssertTrue(MeetingExportAvailability.canUseAI(
+            text: "日期：7月20日",
+            isAnalyzing: false,
+            isAIConfigured: true
+        ))
+        XCTAssertTrue(MeetingExportAvailability.canUseLocalRules(
+            text: "日期：7月20日",
+            isAnalyzing: false
+        ))
     }
 
     func testCalendarNotesKeepOriginalTextWithoutSummary() {
