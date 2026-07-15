@@ -133,6 +133,8 @@ struct MeetingInputView: View {
                         GridRow {
                             Text("会议名称：…")
                             Text("日期：…")
+                                .hidden()
+                                .accessibilityHidden(true)
                         }
                         GridRow {
                             Text("起始时间：…")

@@ -57,6 +57,36 @@ final class MeetingTextParserTests: XCTestCase {
         XCTAssertEqual(result.draft.meetingURL, "https://meeting.example.com/123")
     }
 
+    func testParsesTemplateStartAndEndDates() {
+        let text = """
+        会议名称：集中评审会
+        开始日期：2026年7月11日
+        结束日期：2026年7月13日
+        起始时间：上午9点至10点
+        地点：第二会议室
+        """
+
+        let result = MeetingTextParser(calendar: calendar).parse(text, referenceDate: referenceDate)
+        let start = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: result.draft.startDate)
+        let end = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: result.draft.endDate)
+
+        XCTAssertEqual(result.draft.title, "集中评审会")
+        XCTAssertEqual(start, DateComponents(year: 2026, month: 7, day: 11, hour: 9, minute: 0))
+        XCTAssertEqual(end, DateComponents(year: 2026, month: 7, day: 13, hour: 10, minute: 0))
+    }
+
+    func testParsesInlineDateRange() {
+        let draft = MeetingTextParser(calendar: calendar).parse(
+            "会议名称：培训会\n日期：7月11日至13日\n时间：上午9点",
+            referenceDate: referenceDate
+        ).draft
+        let start = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: draft.startDate)
+        let end = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: draft.endDate)
+
+        XCTAssertEqual(start, DateComponents(year: 2026, month: 7, day: 11, hour: 9, minute: 0))
+        XCTAssertEqual(end, DateComponents(year: 2026, month: 7, day: 13, hour: 9, minute: 0))
+    }
+
     func testUsesMainMeetingContentAsTitleForDirectImport() {
         let text = """
         日期：7月12日
@@ -229,6 +259,32 @@ final class MeetingTextParserTests: XCTestCase {
         XCTAssertEqual(result.draft.location, "总局大楼A213会议室")
         XCTAssertEqual(start, DateComponents(year: 2026, month: 7, day: 2, hour: 9, minute: 0))
         XCTAssertEqual(result.draft.endDate.timeIntervalSince(result.draft.startDate), 60 * 60)
+    }
+
+    func testMapsAIStartAndEndDates() {
+        let payload = AIMeetingPayload(
+            title: "集中培训会",
+            startDate: "2026-07-11",
+            endDate: "2026-07-13",
+            startTime: "09:00",
+            endTime: "17:30",
+            location: "培训中心",
+            meetingURL: "",
+            attendees: "",
+            warnings: []
+        )
+
+        let result = MeetingAIResultMapper().map(
+            payload,
+            originalText: "7月11日至13日集中培训",
+            referenceDate: referenceDate,
+            method: .zhipuAI
+        )
+        let start = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: result.draft.startDate)
+        let end = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: result.draft.endDate)
+
+        XCTAssertEqual(start, DateComponents(year: 2026, month: 7, day: 11, hour: 9, minute: 0))
+        XCTAssertEqual(end, DateComponents(year: 2026, month: 7, day: 13, hour: 17, minute: 30))
     }
 
     func testSharedMapperMarksQwenBackupResult() {

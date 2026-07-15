@@ -19,27 +19,40 @@ struct MeetingTextParser {
         let title = extractTitle(from: text)
         recognized.insert(.title)
 
-        let dateResult = extractDate(from: text, referenceDate: referenceDate)
+        let dateRangeResult = extractDateRange(from: text, referenceDate: referenceDate)
+        let dateResult = dateRangeResult.start ?? extractDate(from: text, referenceDate: referenceDate)
         if dateResult.wasRecognized { recognized.insert(.date) }
         if let warning = dateResult.warning { warnings.append(warning) }
+        if let warning = dateRangeResult.end?.warning { warnings.append(warning) }
 
         let timeResult = extractTimes(from: text)
         if timeResult.start != nil { recognized.insert(.startTime) }
         if timeResult.end != nil { recognized.insert(.endTime) }
 
         let baseDate = dateResult.date ?? referenceDate
+        let endBaseDate = dateRangeResult.end?.date ?? baseDate
         let periodDefault = defaultStartTime(from: text)
         let startComponents = timeResult.start ?? periodDefault?.time ?? (hour: 9, minute: 0)
         let startDate = date(bySetting: startComponents, on: baseDate)
         let endDate: Date
 
         if let endComponents = timeResult.end {
-            var candidate = date(bySetting: endComponents, on: baseDate)
+            var candidate = date(bySetting: endComponents, on: endBaseDate)
             if candidate <= startDate {
                 candidate = calendar.date(byAdding: .day, value: 1, to: candidate) ?? candidate
                 warnings.append("结束时间早于开始时间，已按跨天会议处理，请确认。")
             }
             endDate = candidate
+        } else if dateRangeResult.end?.date != nil {
+            let candidate = date(bySetting: startComponents, on: endBaseDate)
+            if candidate > startDate {
+                endDate = candidate
+            } else if calendar.isDate(endBaseDate, inSameDayAs: baseDate) {
+                endDate = startDate.addingTimeInterval(defaultDuration)
+            } else {
+                warnings.append("结束日期不晚于开始日期，已按默认一小时填写，请确认。")
+                endDate = startDate.addingTimeInterval(defaultDuration)
+            }
         } else {
             endDate = startDate.addingTimeInterval(defaultDuration)
         }
@@ -86,11 +99,13 @@ struct MeetingTextParser {
         formatter.dateFormat = "yyyy年M月d日（EEEE）"
         let dateText = formatter.string(from: date)
 
-        return text.replacingOccurrences(
-            of: #"(?m)^\s*日期\s*[：:]\s*[^\n]*"#,
-            with: "日期：\(dateText)",
-            options: .regularExpression
-        )
+        return ["开始日期", "起始日期", "日期"].reduce(text) { value, label in
+            value.replacingOccurrences(
+                of: #"(?m)^\s*"# + label + #"\s*[：:]\s*[^\n]*"#,
+                with: "\(label)：\(dateText)",
+                options: .regularExpression
+            )
+        }
     }
 
     private func normalize(_ text: String) -> String {
@@ -135,7 +150,7 @@ struct MeetingTextParser {
             return meetingTitle(topic: value, action: "")
         }
 
-        let ignoredPrefixes = ["各位", "大家", "起始时间", "时间", "日期", "地点", "地址", "参会", "与会", "会议链接", "腾讯会议", "链接", "联系人", "通知"]
+        let ignoredPrefixes = ["各位", "大家", "开始日期", "起始日期", "结束日期", "截止日期", "终止日期", "起始时间", "时间", "日期", "地点", "地址", "参会", "与会", "会议链接", "腾讯会议", "链接", "联系人", "通知"]
         let candidates = text
             .components(separatedBy: CharacterSet(charactersIn: "\n。；;"))
             .map(cleanValue)
@@ -235,6 +250,68 @@ struct MeetingTextParser {
         }
 
         return (nil, false, nil)
+    }
+
+    private func extractDateRange(
+        from text: String,
+        referenceDate: Date
+    ) -> (
+        start: (date: Date?, wasRecognized: Bool, warning: String?)?,
+        end: (date: Date?, wasRecognized: Bool, warning: String?)?
+    ) {
+        let stopLabels = ["开始日期", "起始日期", "结束日期", "截止日期", "终止日期", "日期", "时间", "起始时间", "地点", "地址", "参会", "联系人", "会议链接", "链接"]
+        var startResult: (date: Date?, wasRecognized: Bool, warning: String?)?
+        var endResult: (date: Date?, wasRecognized: Bool, warning: String?)?
+
+        let startValue = extractLabeledValue(from: text, labels: ["开始日期", "起始日期"], stoppingAt: stopLabels)
+        if !startValue.isEmpty {
+            startResult = extractDate(from: startValue, referenceDate: referenceDate)
+        }
+
+        let endValue = extractLabeledValue(from: text, labels: ["结束日期", "截止日期", "终止日期"], stoppingAt: stopLabels)
+        if !endValue.isEmpty {
+            endResult = extractDate(from: endValue, referenceDate: referenceDate)
+        }
+
+        if let range = extractInlineDateRange(from: text, referenceDate: referenceDate) {
+            startResult = range.start
+            endResult = range.end
+        }
+
+        return (startResult, endResult)
+    }
+
+    private func extractInlineDateRange(
+        from text: String,
+        referenceDate: Date
+    ) -> (
+        start: (date: Date?, wasRecognized: Bool, warning: String?),
+        end: (date: Date?, wasRecognized: Bool, warning: String?)
+    )? {
+        let patterns = [
+            #"(?<!\d)(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?\s*(?:-|~|至|到)\s*(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?"#,
+            #"(?<!\d)(\d{1,2})月(\d{1,2})[日号]?\s*(?:-|~|至|到)\s*(?:(\d{1,2})月)?(\d{1,2})[日号]?"#
+        ]
+
+        if let captures = firstCaptures(patterns[0], in: text), captures.count == 6,
+           let startYear = Int(captures[0]), let startMonth = Int(captures[1]), let startDay = Int(captures[2]),
+           let endYear = Int(captures[3]), let endMonth = Int(captures[4]), let endDay = Int(captures[5]) {
+            let start = calendar.date(from: DateComponents(year: startYear, month: startMonth, day: startDay))
+            let end = calendar.date(from: DateComponents(year: endYear, month: endMonth, day: endDay))
+            return ((start, true, nil), (end, true, nil))
+        }
+
+        if let captures = firstCapturesKeepingEmpty(patterns[1], in: text), captures.count == 4,
+           let startMonth = Int(captures[0]), let startDay = Int(captures[1]),
+           let endDay = Int(captures[3]) {
+            let currentYear = calendar.component(.year, from: referenceDate)
+            let endMonth = Int(captures[2]) ?? startMonth
+            let start = calendar.date(from: DateComponents(year: currentYear, month: startMonth, day: startDay))
+            let end = calendar.date(from: DateComponents(year: currentYear, month: endMonth, day: endDay))
+            return ((start, true, nil), (end, true, nil))
+        }
+
+        return nil
     }
 
     private func extractTimes(from text: String) -> (start: (hour: Int, minute: Int)?, end: (hour: Int, minute: Int)?) {
@@ -432,6 +509,8 @@ struct MeetingSpeechFormatter {
             ("主要会议内容", "主要会议内容"),
             ("参会人员", "参会人员"),
             ("会议名称", "会议名称"),
+            ("开始日期", "开始日期"),
+            ("结束日期", "结束日期"),
             ("起始时间", "起始时间"),
             ("起始时间", #"(?<!起始)时间"#),
             ("日期", "日期"),
