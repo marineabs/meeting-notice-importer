@@ -37,21 +37,21 @@ struct ParsingResult: Hashable {
 
 enum ParsingMethod: String, Hashable {
     case zhipuAI
-    case qwenAI
+    case openRouterAI
     case localRules
     case localFallback
 
     var displayName: String {
         switch self {
         case .zhipuAI: "智谱 AI"
-        case .qwenAI: "千问 AI（备用）"
+        case .openRouterAI: "OpenRouter AI（备用）"
         case .localRules: "本地规则"
         case .localFallback: "本地规则（AI 已降级）"
         }
     }
 
     var isAI: Bool {
-        self == .zhipuAI || self == .qwenAI
+        self == .zhipuAI || self == .openRouterAI
     }
 }
 

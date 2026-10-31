@@ -2,44 +2,44 @@ import Foundation
 
 enum AIProviderPreference: String, CaseIterable, Identifiable {
     case zhipu
-    case qwen
+    case openRouter
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .zhipu: "智谱 GLM-4.7-Flash"
-        case .qwen: "千问 qwen-flash"
+        case .openRouter: "OpenRouter 免费模型"
         }
     }
 
     var shortName: String {
         switch self {
         case .zhipu: "智谱"
-        case .qwen: "千问"
+        case .openRouter: "OpenRouter"
         }
     }
 
     var backup: AIProviderPreference {
-        self == .zhipu ? .qwen : .zhipu
+        self == .zhipu ? .openRouter : .zhipu
     }
 }
 
 struct MeetingAnalysisCoordinator {
     private let localParser = MeetingTextParser()
     private let zhipuService = ZhipuAIService()
-    private let qwenService = QwenAIService()
+    private let openRouterService = OpenRouterAIService()
 
     func analyze(
         _ text: String,
         zhipuAPIKey: String?,
-        qwenAPIKey: String?,
+        openRouterAPIKey: String?,
         preferredProvider: AIProviderPreference?,
         referenceDate: Date = Date()
     ) async -> ParsingResult {
         var failures: [String] = []
         let hasZhipu = hasValue(zhipuAPIKey)
-        let hasQwen = hasValue(qwenAPIKey)
+        let hasOpenRouter = hasValue(openRouterAPIKey)
         let providerOrder = preferredProvider.map { [$0, $0.backup] } ?? []
 
         for provider in providerOrder {
@@ -49,9 +49,9 @@ struct MeetingAnalysisCoordinator {
                 case .zhipu:
                     guard let zhipuAPIKey, hasZhipu else { continue }
                     result = try await zhipuService.analyze(text, apiKey: zhipuAPIKey, referenceDate: referenceDate)
-                case .qwen:
-                    guard let qwenAPIKey, hasQwen else { continue }
-                    result = try await qwenService.analyze(text, apiKey: qwenAPIKey, referenceDate: referenceDate)
+                case .openRouter:
+                    guard let openRouterAPIKey, hasOpenRouter else { continue }
+                    result = try await openRouterService.analyze(text, apiKey: openRouterAPIKey, referenceDate: referenceDate)
                 }
 
                 if provider != preferredProvider, let preferredProvider {
@@ -67,7 +67,7 @@ struct MeetingAnalysisCoordinator {
         }
 
         var fallback = localParser.parse(text, referenceDate: referenceDate)
-        if hasZhipu || hasQwen {
+        if hasZhipu || hasOpenRouter {
             fallback.method = .localFallback
             let detail: String
             if preferredProvider == nil {
@@ -85,8 +85,9 @@ struct MeetingAnalysisCoordinator {
     }
 }
 
-struct QwenAIService {
-    private let endpoint = URL(string: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")!
+struct OpenRouterAIService {
+    private let endpoint = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
+    private let model = "openrouter/free"
 
     func analyze(_ text: String, apiKey: String, referenceDate: Date) async throws -> ParsingResult {
         var request = URLRequest(url: endpoint)
@@ -94,72 +95,58 @@ struct QwenAIService {
         request.timeoutInterval = 60
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(QwenChatRequest(
-            model: "qwen-flash",
+        request.httpBody = try JSONEncoder().encode(OpenRouterChatRequest(
+            model: model,
             messages: [
                 .init(role: "system", content: MeetingAIPrompt.system(referenceDate: referenceDate)),
                 .init(role: "user", content: MeetingAIPrompt.user(text: text))
             ],
-            responseFormat: .init(type: "json_object"),
-            enableThinking: false,
             temperature: 0.1
         ))
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw QwenAIError.invalidResponse
+            throw OpenRouterAIError.invalidResponse
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
-            let apiError = try? JSONDecoder().decode(QwenErrorResponse.self, from: data)
-            throw QwenAIError.api(status: httpResponse.statusCode, message: apiError?.message ?? apiError?.error?.message)
+            let apiError = try? JSONDecoder().decode(OpenRouterErrorResponse.self, from: data)
+            throw OpenRouterAIError.api(status: httpResponse.statusCode, message: apiError?.message ?? apiError?.error?.message)
         }
 
-        let chatResponse = try JSONDecoder().decode(QwenChatResponse.self, from: data)
+        let chatResponse = try JSONDecoder().decode(OpenRouterChatResponse.self, from: data)
         guard let content = chatResponse.choices.first?.message.content,
               let contentData = AIResponseContentDecoder.jsonData(from: content) else {
-            throw QwenAIError.missingContent
+            throw OpenRouterAIError.missingContent
         }
 
         let payload: AIMeetingPayload
         do {
             payload = try JSONDecoder().decode(AIMeetingPayload.self, from: contentData)
         } catch {
-            throw QwenAIError.invalidJSON
+            throw OpenRouterAIError.invalidJSON
         }
 
         return MeetingAIResultMapper().map(
             payload,
             originalText: text,
             referenceDate: referenceDate,
-            method: .qwenAI
+            method: .openRouterAI
         )
     }
 }
 
-private struct QwenChatRequest: Encodable {
+private struct OpenRouterChatRequest: Encodable {
     let model: String
     let messages: [Message]
-    let responseFormat: ResponseFormat
-    let enableThinking: Bool
     let temperature: Double
 
     struct Message: Encodable {
         let role: String
         let content: String
     }
-
-    struct ResponseFormat: Encodable {
-        let type: String
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case model, messages, temperature
-        case responseFormat = "response_format"
-        case enableThinking = "enable_thinking"
-    }
 }
 
-private struct QwenChatResponse: Decodable {
+private struct OpenRouterChatResponse: Decodable {
     let choices: [Choice]
 
     struct Choice: Decodable {
@@ -171,7 +158,7 @@ private struct QwenChatResponse: Decodable {
     }
 }
 
-private struct QwenErrorResponse: Decodable {
+private struct OpenRouterErrorResponse: Decodable {
     let message: String?
     let error: APIError?
 
@@ -180,7 +167,7 @@ private struct QwenErrorResponse: Decodable {
     }
 }
 
-enum QwenAIError: LocalizedError {
+enum OpenRouterAIError: LocalizedError {
     case invalidResponse
     case api(status: Int, message: String?)
     case missingContent
@@ -191,7 +178,7 @@ enum QwenAIError: LocalizedError {
         case .invalidResponse:
             "服务器响应无效。"
         case .api(let status, let message):
-            "接口返回 \(status)\(message.map { "：\($0)" } ?? "")。"
+            "接口返回 \(status)\(message.map { "：\($0)" } ?? "")."
         case .missingContent:
             "接口没有返回分析内容。"
         case .invalidJSON:

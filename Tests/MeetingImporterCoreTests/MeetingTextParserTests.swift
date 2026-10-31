@@ -387,7 +387,7 @@ final class MeetingTextParserTests: XCTestCase {
         XCTAssertEqual(end, DateComponents(year: 2026, month: 7, day: 13, hour: 17, minute: 30))
     }
 
-    func testSharedMapperMarksQwenBackupResult() {
+    func testSharedMapperMarksOpenRouterBackupResult() {
         let payload = AIMeetingPayload(
             title: "党组会",
             date: "2026-07-02",
@@ -403,10 +403,10 @@ final class MeetingTextParserTests: XCTestCase {
             payload,
             originalText: "7月2日上午9点召开党组会",
             referenceDate: referenceDate,
-            method: .qwenAI
+            method: .openRouterAI
         )
 
-        XCTAssertEqual(result.method, .qwenAI)
+        XCTAssertEqual(result.method, .openRouterAI)
         XCTAssertEqual(result.draft.title, "党组会")
     }
 }

@@ -71,12 +71,12 @@ final class APIKeyStore {
 
 enum AIProviderKey {
     case zhipu
-    case qwen
+    case openRouter
 
     var account: String {
         switch self {
         case .zhipu: "zhipu-api-key"
-        case .qwen: "qwen-api-key"
+        case .openRouter: "openrouter-api-key"
         }
     }
 }

@@ -17,7 +17,7 @@ let package = Package(
                 "Services/MeetingTextParser.swift",
                 "Services/MeetingAIShared.swift",
                 "Services/ZhipuAIService.swift",
-                "Services/QwenAIService.swift"
+                "Services/MeetingAIService.swift"
             ]
         ),
         .testTarget(

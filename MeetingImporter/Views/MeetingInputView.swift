@@ -8,7 +8,7 @@ struct MeetingInputView: View {
     @State private var parsingResult: ParsingResult?
     @State private var isAnalyzing = false
     @State private var isZhipuConfigured = false
-    @State private var isQwenConfigured = false
+    @State private var isOpenRouterConfigured = false
     @State private var showingAISettings = false
     @State private var showingInputExample = false
     @State private var isPressingVoiceInput = false
@@ -21,7 +21,7 @@ struct MeetingInputView: View {
     private let coordinator = MeetingAnalysisCoordinator()
     private let localParser = MeetingTextParser()
 
-    private var isAIConfigured: Bool { isZhipuConfigured || isQwenConfigured }
+    private var isAIConfigured: Bool { isZhipuConfigured || isOpenRouterConfigured }
 
     var body: some View {
         NavigationStack {
@@ -99,9 +99,9 @@ struct MeetingInputView: View {
                         Text(AIProviderPreference.zhipu.shortName)
                             .tag(AIProviderPreference.zhipu)
                     }
-                    if isQwenConfigured {
-                        Text(AIProviderPreference.qwen.shortName)
-                            .tag(AIProviderPreference.qwen)
+                    if isOpenRouterConfigured {
+                        Text(AIProviderPreference.openRouter.shortName)
+                            .tag(AIProviderPreference.openRouter)
                     }
                 }
                 .pickerStyle(.menu)
@@ -346,12 +346,12 @@ struct MeetingInputView: View {
     private func analyze() {
         isAnalyzing = true
         let zhipuAPIKey = APIKeyStore.shared.loadAPIKey(for: .zhipu)
-        let qwenAPIKey = APIKeyStore.shared.loadAPIKey(for: .qwen)
+        let openRouterAPIKey = APIKeyStore.shared.loadAPIKey(for: .openRouter)
         Task {
             parsingResult = await coordinator.analyze(
                 sourceText,
                 zhipuAPIKey: zhipuAPIKey,
-                qwenAPIKey: qwenAPIKey,
+                openRouterAPIKey: openRouterAPIKey,
                 preferredProvider: isAIConfigured ? selectedProvider : nil
             )
             isAnalyzing = false
@@ -393,10 +393,10 @@ struct MeetingInputView: View {
 
     private func refreshAIStatus() {
         isZhipuConfigured = APIKeyStore.shared.hasAPIKey(for: .zhipu)
-        isQwenConfigured = APIKeyStore.shared.hasAPIKey(for: .qwen)
-        if selectedProvider == .zhipu && !isZhipuConfigured && isQwenConfigured {
-            preferredProviderRaw = AIProviderPreference.qwen.rawValue
-        } else if selectedProvider == .qwen && !isQwenConfigured && isZhipuConfigured {
+        isOpenRouterConfigured = APIKeyStore.shared.hasAPIKey(for: .openRouter)
+        if selectedProvider == .zhipu && !isZhipuConfigured && isOpenRouterConfigured {
+            preferredProviderRaw = AIProviderPreference.openRouter.rawValue
+        } else if selectedProvider == .openRouter && !isOpenRouterConfigured && isZhipuConfigured {
             preferredProviderRaw = AIProviderPreference.zhipu.rawValue
         }
     }

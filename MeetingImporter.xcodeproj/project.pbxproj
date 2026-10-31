@@ -19,7 +19,7 @@
 		A1000000000000000000000A /* ZhipuAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* ZhipuAIService.swift */; };
 		A1000000000000000000000B /* AISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* AISettingsView.swift */; };
 		A1000000000000000000000C /* MeetingAIShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* MeetingAIShared.swift */; };
-		A1000000000000000000000D /* QwenAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* QwenAIService.swift */; };
+		A1000000000000000000000D /* MeetingAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* MeetingAIService.swift */; };
 		A1000000000000000000000E /* SpeechInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* SpeechInputService.swift */; };
 /* End PBXBuildFile section */
 
@@ -39,7 +39,7 @@
 		A2000000000000000000000D /* ZhipuAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZhipuAIService.swift; sourceTree = "<group>"; };
 		A2000000000000000000000E /* AISettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* MeetingAIShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAIShared.swift; sourceTree = "<group>"; };
-		A20000000000000000000010 /* QwenAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenAIService.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* MeetingAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAIService.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* SpeechInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechInputService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -101,7 +101,7 @@
 				A2000000000000000000000C /* APIKeyStore.swift */,
 				A2000000000000000000000D /* ZhipuAIService.swift */,
 				A2000000000000000000000F /* MeetingAIShared.swift */,
-				A20000000000000000000010 /* QwenAIService.swift */,
+				A20000000000000000000010 /* MeetingAIService.swift */,
 				A20000000000000000000011 /* SpeechInputService.swift */,
 			);
 			path = Services;
@@ -242,7 +242,7 @@
 				A1000000000000000000000A /* ZhipuAIService.swift in Sources */,
 				A1000000000000000000000B /* AISettingsView.swift in Sources */,
 				A1000000000000000000000C /* MeetingAIShared.swift in Sources */,
-				A1000000000000000000000D /* QwenAIService.swift in Sources */,
+				A1000000000000000000000D /* MeetingAIService.swift in Sources */,
 				A1000000000000000000000E /* SpeechInputService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
